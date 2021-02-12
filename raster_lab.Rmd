@@ -1,0 +1,129 @@
+---
+title: "lab_6_raster"
+author: "Shelby Walsh"
+date: "2/11/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(raster)
+library(tidyverse)
+library(here)
+library(sf)
+library(fasterize)
+```
+
+# The Data
+```{r}
+landsat_file <- here('data/Landsat7.tif')
+
+ls_1 <- raster(landsat_file)
+ls_1
+
+```
+
+```{r}
+plot(ls_1)
+
+ls_2 <- raster(landsat_file, band = 2)
+ls_3 <- raster(landsat_file, band = 3)
+ls_4 <- raster(landsat_file, band = 4)
+
+ls_stack <- raster::stack(landsat_file)
+ls_stack
+```
+
+### Prepare data
+```{r}
+ls_1 <- raster::aggregate(ls_1, fact = 3, fun = mean)
+ls_2 <- raster::aggregate(ls_2, fact = 3, fun = mean)
+ls_3 <- raster::aggregate(ls_3, fact = 3, fun = mean)
+ls_4 <- raster::aggregate(ls_4, fact = 3, fun = mean)
+ls_4
+
+plot(ls_1, col = hcl.colors(n = 100, palette = 'Blues 2'))
+plot(ls_2, col = hcl.colors(n = 100, palette = 'Greens 2'))
+plot(ls_3, col = hcl.colors(n = 100, palette = 'Reds 2'))
+plot(ls_4, col = hcl.colors(n = 100, palette = 'Reds 2'))
+```
+
+```{r}
+sbc_rast <- raster(here('data/county.tif'))
+plot(sbc_rast)
+plot(ls_3)
+mask(ls_3, sbc_rast) %>% plot()
+mask(ls_3, sbc_rast) %>% plot()
+
+ls_3 <- mask(ls_3, sbc_rast)
+ls_4 <- mask(ls_4, sbc_rast)
+```
+
+## raster algerbra
+
+```{r}
+ls_3
+ls_3*2
+
+log(ls_3)
+
+plot(ls_3); plot(ls_3)
+```
+
+
+```{r}
+ls_3 +ls_4
+
+```
+
+### Calc rater
+```{r}
+ls_stack <- stack(ls_1, ls_2, ls_3, ls_4)
+ls_mean <- raster::calc(ls_stack, fun = mean, na.rm = FALSE)
+
+plot(ls_mean)
+```
+
+# Analysis
+
+## NDVI
+
+```{r}
+knitr::include_graphics('img/spectrum.png')
+
+knitr::include_graphics('img/ir_photo.jpg')
+```
+
+
+$$NDVI = \frac{NIR +Red}{NIR  + Red}$$
+
+```{r}
+ndvi <- (ls_4 - ls_3) / (ls_4 +ls_3)
+plot(ndvi, col = hcl.colors(100, 'Grays'))
+
+is_forest <- function(x, thresh = .3) {
+  y <- ifelse(x >= thresh, 1, NA)
+  return(y)
+}
+
+forest <- calc(ndvi, fun = is_forest)
+plot(forest, col = 'green')
+```
+
+## ggplot and raster
+```{r}
+ndvi_df <- raster::rasterToPoints(ndvi) %>% 
+  as.data.frame()
+
+forest_df <- raster::rasterToPoints(forest) %>% 
+  as.data.frame()
+
+ggplot(data = ndvi_df, aes(x =x, y =y, fill = layer)) +
+  geom_raster() +
+  geom_raster(data = forest_df, fill = 'green') +
+  coord_sf(expand = 0) +
+  scale_fill_gradient(low = 'black', high = 'white') +
+  theme_void() +
+  theme(panel.background = element_rect(fill = 'slateblue4'))
+```
+
